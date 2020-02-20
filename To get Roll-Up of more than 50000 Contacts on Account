@@ -1,0 +1,40 @@
+Description: To get Roll-Up of more than 50000 Contacts on Account.
+Class Name : ContactRollupSchedulable
+
+global class ContactRollupSchedulable implements Schedulable {  
+  @ReadOnly 
+  global void execute (SchedulableContext ctx){ 
+  Map<Id,Decimal> accIdToConAmtMap = new Map<Id,Decimal>();
+  for(AggregateResult aggResult : [SELECT  SUM(Amount__c) totalAmt, accountId FROM Contact GROUP BY ROLLUP (accountId)]){ 
+     accIdToConAmtMap.put(aggResult.accountId,(Decimal)aggResult.get('totalAmt'));  
+  } 
+  RollUpUpdateBatch accBatch = new RollUpUpdateBatch(accIdToConAmtMap); 
+  Database.executeBatch(accBatch); 
+ }
+}
+
+
+===============================================================================
+Description: To get Roll-Up of more than 50000 Contacts on Account.
+Class Name : RollUpUpdateBatch
+
+global  RollUpUpdateBatch implements Database.Batchable<sObject>{
+  global Map<String,Decimal> accIdToconAmtCountMap = new Map<String,Decimal>();
+  global RollUpUpdateBatch(Map<Id,Decimal> accIdToconAmtCountMap){
+    this.accIdToconAmtCountMap=accIdToconAmtCountMap;
+  }
+  global Database.QueryLocator start(Database.BatchableContext BC){
+    String query = 'SELECT Id,total_con_amount__c FROM Account WHERE Id IN :accIdToconAmtCountMap.keySet()';
+    return Database.getQueryLocator(query); 
+  }
+  global void execute(Database.BatchableContext info, List<Account> accList){
+   for(Account acc : accList){
+    if(!accIdToconAmtCountMap.isEmpty() && accIdToconAmtCountMap.containsKey(acc.Id)){
+      acc.total_con_amount__c = accIdToconAmtCountMap.get(acc.Id);
+    }
+   }
+   update accList;
+  }
+  global void finish(Database.BatchableContext BC){ 
+  }
+}
